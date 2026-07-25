@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: docker.io/pgvector/pgvector:pg17
+    container_name: local_infra_pg
+    environment:
+      POSTGRES_USER: local_infra
+      POSTGRES_PASSWORD: local_infra
+      POSTGRES_DB: local_infra
+      # Deterministic collation so tsvector/ordering behave identically across machines.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # 8.7GB free RAM shared with an 8B model and bge/nomic embedding calls.
+    # Keep Postgres small and predictable rather than letting it grow into the
+    # headroom the extraction ladder needs.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=32MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=50
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U local_infra -d local_infra"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  pgdata:

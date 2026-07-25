@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# cognee's own state (kuzu graph, system + data roots). Local, regenerable,
+# and large -- but note the kuzu graph is NOT in Postgres, so back it up
+# separately if a memory store ever becomes worth preserving.
+.cognee_state/
+
+.env
+*.sqlite
+*.db
