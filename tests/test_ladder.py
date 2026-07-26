@@ -7,9 +7,11 @@ and budget-gated cloud. No model, no network.
 
 from __future__ import annotations
 
+import json
+
 from local_infra.extraction.budget import Budget
 from local_infra.extraction.ladder import ExtractionLadder
-from local_infra.extraction.providers.base import Stage
+from local_infra.extraction.providers.base import ProviderResult, Stage
 from local_infra.extraction.schemas import ExtractionResult, flatten_schema
 from tests._fakes import (
     GOOD, GOOD2, HALLUC, MED, SRC,
@@ -132,3 +134,33 @@ async def test_flatten_schema_inlines_all_refs() -> None:
     # The inlined fact shape survived flattening.
     item = flat["properties"]["facts"]["items"]
     assert set(item["properties"]) >= {"subject", "predicate", "object", "evidence_span"}
+
+
+# --------------------------------------------------------------------------- #
+# Blank-object guard.
+#
+# Asking a QUESTION makes models emit a subject/predicate with an empty object.
+# Such a row is still single-valued, so it supersedes the real answer and
+# destroys a true fact. It must never survive parsing — but it also must not
+# take well-formed facts extracted alongside it down with it.
+# --------------------------------------------------------------------------- #
+async def test_blank_object_fact_is_dropped_not_stored() -> None:
+    raw = json.dumps(
+        {"facts": [dict(GOOD, object=""), dict(GOOD, object="   ")]}
+    )
+    small = FakeProvider(Stage.LOCAL_SMALL, [ProviderResult(raw=raw)])
+    repair = FakeProvider(Stage.LOCAL_REPAIR, [facts_result(GOOD)])
+    res = await build([small, repair]).run(SRC)
+
+    # Nothing usable at the first rung -> escalate, and no blank ever emitted.
+    assert all(f.fact.object.strip() for f in res.facts)
+    assert res.facts and res.facts[0].fact.object == "globex"
+
+
+async def test_blank_fact_does_not_discard_its_valid_siblings() -> None:
+    raw = json.dumps({"facts": [dict(GOOD, object=""), GOOD2]})
+    small = FakeProvider(Stage.LOCAL_SMALL, [ProviderResult(raw=raw)])
+    res = await build([small]).run(SRC)
+
+    objects = [f.fact.object for f in res.facts]
+    assert objects == ["chennai"], objects  # the good sibling survived alone

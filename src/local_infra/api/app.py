@@ -14,7 +14,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
+from local_infra.config import get_settings
 from local_infra.core.registry import build_backend
 from local_infra.core.service import MemoryService
 
@@ -40,6 +42,16 @@ def create_app(service: MemoryService | None = None) -> FastAPI:
             await built.close()
 
     app = FastAPI(title="local_infra memory service", version="0.1.0", lifespan=lifespan)
+
+    # The desktop shell calls this service from a webview origin, so preflight and
+    # actual requests both need CORS headers. Origins are an explicit allow-list
+    # (never "*") because this service is unauthenticated and binds localhost.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=get_settings().cors_origins,
+        allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+    )
 
     # Imported here (not at module top) to avoid a circular import: the routers import
     # get_service from this module.

@@ -35,6 +35,7 @@ from local_infra.core.service import (
     ForgetResult,
     MemoryService,
     RememberResult,
+    ScopeSummary,
     parse_scope,
 )
 from local_infra.core.temporal import resolve
@@ -66,6 +67,12 @@ class LedgerBackend(MemoryService):
         self._offline = offline
         self._queue = queue
         self._worker: "ExtractionWorker | None" = None
+
+    async def scopes(self) -> list[ScopeSummary]:
+        return [
+            ScopeSummary(name=name, kind=kind, memories=n)
+            for name, kind, n in await self._repo.scope_summaries()
+        ]
 
     # ---- remember --------------------------------------------------------- #
     async def remember(

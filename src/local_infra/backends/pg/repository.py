@@ -391,6 +391,19 @@ class PgRepository:
         rows = await self.conn.fetch("SELECT id FROM scopes ORDER BY id")
         return [int(r["id"]) for r in rows]
 
+    async def scope_summaries(self) -> list[tuple[str, str, int]]:
+        rows = await self.conn.fetch(
+            """
+            SELECT s.name, s.kind, COUNT(m.id) AS n
+              FROM scopes s
+              LEFT JOIN memories m
+                ON m.scope_id = s.id AND m.valid_until IS NULL
+             GROUP BY s.id, s.name, s.kind
+             ORDER BY s.name
+            """
+        )
+        return [(str(r["name"]), str(r["kind"]), int(r["n"])) for r in rows]
+
     async def consolidate(
         self, canonical_id: UUID, duplicate_ids, *, reason: str, decided_by: str
     ) -> None:

@@ -173,9 +173,22 @@ def _parse(pr: ProviderResult, decision: GateDecision) -> list[ExtractedFact] | 
     if not pr.ok or pr.raw is None:
         return None
     try:
-        facts = ExtractionResult.model_validate_json(pr.raw).facts
+        payload = json.loads(pr.raw)
     except (ValueError, json.JSONDecodeError):
         return None
+    if not isinstance(payload, dict):
+        return None
+
+    # Validate fact-by-fact rather than through ExtractionResult: one malformed
+    # entry (typically a blank object from an interrogative input) must not
+    # discard the well-formed facts extracted alongside it.
+    facts: list[ExtractedFact] = []
+    for raw_fact in payload.get("facts") or []:
+        try:
+            facts.append(ExtractedFact.model_validate(raw_fact))
+        except ValueError:
+            continue
+
     if not facts and decision.predicted_facts >= 1:
         return None
     return facts

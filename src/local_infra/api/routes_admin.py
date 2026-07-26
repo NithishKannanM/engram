@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends
 
 from local_infra.api.app import get_service
 from local_infra.api.schemas import ImproveRequest
-from local_infra.core.service import HealthReport, ImproveReport, MemoryService
+from local_infra.core.service import (
+    HealthReport,
+    ImproveReport,
+    MemoryService,
+    ScopeSummary,
+)
 
 router = APIRouter(tags=["admin"])
 
@@ -21,3 +26,9 @@ async def improve(
 @router.get("/health")
 async def health(svc: MemoryService = Depends(get_service)) -> HealthReport:
     return await svc.health()
+
+
+@router.get("/scopes")
+async def scopes(svc: MemoryService = Depends(get_service)) -> list[ScopeSummary]:
+    """Every scope with its live fact count — lets a client list projects."""
+    return await svc.scopes()

@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     backend: str = "exmem"  # "exmem" (zero-infra) | "cognee" (pg ledger + graph)
     api_host: str = "127.0.0.1"
     api_port: int = 8077
+    # Browser-origin clients (the Tauri desktop shell) need CORS: its webview is a
+    # real origin, so without these headers every fetch fails as an opaque network
+    # error. Vite dev serves :1420; a bundled Tauri app on Linux/Windows serves
+    # http://tauri.localhost, on macOS tauri://localhost.
+    cors_origins: list[str] = [
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "http://tauri.localhost",
+        "tauri://localhost",
+    ]
 
     # --- Cognee on-disk state (kept OUT of .venv/site-packages) ---
     state_dir: Path = Field(default=_PROJECT_ROOT / ".cognee_state")

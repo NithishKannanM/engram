@@ -155,6 +155,14 @@ class Repository(Protocol):
         """Every scope id — so ``improve(scope=None)`` can sweep the whole ledger."""
         ...
 
+    async def scope_summaries(self) -> list[tuple[str, str, int]]:
+        """``(name, kind, currently-valid memory count)`` per scope, name-ordered.
+
+        Counts exclude closed rows: a client listing scopes wants how much is true
+        now, not how many revisions the ledger has accumulated.
+        """
+        ...
+
     async def consolidate(
         self,
         canonical_id: UUID,

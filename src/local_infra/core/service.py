@@ -95,6 +95,15 @@ class ImproveReport:
 
 
 @dataclass
+class ScopeSummary:
+    """One scope and how many facts are currently true in it."""
+
+    name: str
+    kind: str
+    memories: int
+
+
+@dataclass
 class HealthReport:
     backend: str
     ok: bool
@@ -183,6 +192,11 @@ class MemoryService(ABC):
     @abstractmethod
     async def health(self) -> HealthReport:
         ...
+
+    async def scopes(self) -> list[ScopeSummary]:
+        """Every scope with its live fact count. Backends that own a Repository get
+        this for free; the default is empty so a fake service need not implement it."""
+        return []
 
     async def start(self) -> None:
         """Start background work (e.g. the async extraction worker). No-op by default;

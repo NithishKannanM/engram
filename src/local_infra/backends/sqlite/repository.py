@@ -294,6 +294,19 @@ class SqliteRepository:
         rows = self._conn.execute("SELECT id FROM scopes ORDER BY id").fetchall()
         return [int(r[0]) for r in rows]
 
+    async def scope_summaries(self) -> list[tuple[str, str, int]]:
+        rows = self._conn.execute(
+            """
+            SELECT s.name, s.kind, COUNT(m.id)
+              FROM scopes s
+              LEFT JOIN memories m
+                ON m.scope_id = s.id AND m.valid_until IS NULL
+             GROUP BY s.id, s.name, s.kind
+             ORDER BY s.name
+            """
+        ).fetchall()
+        return [(str(r[0]), str(r[1]), int(r[2])) for r in rows]
+
     async def consolidate(
         self, canonical_id: UUID, duplicate_ids, *, reason: str, decided_by: str
     ) -> None:
