@@ -101,6 +101,14 @@ class CogneeBackend(LedgerBackend):
             repo, ladder, channel=channel, offline=offline, queue=queue, worker_repo=worker_repo
         )
 
+    @property
+    def embedder(self):
+        """The ledger's embedder, so the document store embeds chunks with the SAME
+        model. Documents and memories are fused into one ranking, and two models (or two
+        dimensions) would make every cross-channel comparison meaningless — silently,
+        since pgvector would still return *some* neighbour."""
+        return self._pg.embedder
+
     def _worker_repo(self) -> PgRepository:
         # The worker writes through its own connection (never the request connection).
         return self._wrepo or self._pg

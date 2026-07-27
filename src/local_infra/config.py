@@ -67,6 +67,45 @@ class Settings(BaseSettings):
         "tauri://localhost",
     ]
 
+    # --- Chat / RAG synthesis (LiteLLM-routed; NOT the extraction ladder) ---
+    chat_enabled: bool = True
+    # Default to models already resident for extraction. Only ONE chat-sized model
+    # fits in 6GB, so introducing a third would make Ollama evict and reload on
+    # every alternation — `keep_alive` exists precisely to avoid that ~8.5s cost.
+    chat_model_default: str = "ollama_chat/llama3.1:8b"
+    chat_model_fast: str = "ollama_chat/llama3.2:latest"
+    # Ignored entirely when offline: registry never builds a cloud deployment then.
+    chat_model_cloud: str | None = None
+    chat_temperature: float = 0.3
+    chat_max_tokens: int = 1024
+    # Ollama silently defaults to a 2048-token context. A RAG prompt then gets
+    # left-truncated and the model answers from nothing — which looks like broken
+    # retrieval, not a truncated prompt. 8192 would cost ~1GB more KV cache and
+    # spill past the ~5.8GB of free VRAM, so 4096 is the compromise.
+    chat_num_ctx: int = 4096
+    chat_timeout_s: float = 120.0
+    # Separate from cloud_budget_usd on purpose: sharing the ladder's budget would
+    # let chat spend starve extraction's cloud rung with no visible cause.
+    chat_budget_usd: float = 0.0
+    chat_recall_limit: int = 6
+    # Keys live server-side. Accepting them per-request would force the router to
+    # BUILD a cloud deployment from request data, destroying the structural offline
+    # guarantee, and would leak secrets into access logs and tracebacks.
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+
+    # --- Document RAG (Postgres backend only; exmem answers 501) ---
+    documents_enabled: bool = True
+    # Chunk sizing, in the splitter's `len // 4` token estimate. 350 keeps a chunk well
+    # inside nomic-embed-text's window while staying large enough to carry a whole
+    # argument; 48 tokens of overlap means a fact straddling a boundary is retrievable
+    # from either side. `min` must stay below `max` — the splitter clamps it if not.
+    doc_chunk_tokens: int = 350
+    doc_chunk_min_tokens: int = 80
+    doc_chunk_overlap_tokens: int = 48
+    # Fused memory+chunk results returned by /rag before synthesis.
+    rag_limit: int = 8
+
     # --- Cognee on-disk state (kept OUT of .venv/site-packages) ---
     state_dir: Path = Field(default=_PROJECT_ROOT / ".cognee_state")
 

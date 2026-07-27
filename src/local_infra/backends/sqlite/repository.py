@@ -294,6 +294,23 @@ class SqliteRepository:
         rows = self._conn.execute("SELECT id FROM scopes ORDER BY id").fetchall()
         return [int(r[0]) for r in rows]
 
+    async def coextracted_pairs(
+        self, scope_id: int, *, limit: int = 500
+    ) -> list[tuple[UUID, UUID, UUID]]:
+        rows = self._conn.execute(
+            """
+            SELECT a.memory_id, b.memory_id, a.episode_id
+              FROM memory_episodes a
+              JOIN memory_episodes b
+                ON a.episode_id = b.episode_id AND a.memory_id < b.memory_id
+              JOIN memories ma ON ma.id = a.memory_id AND ma.scope_id = ?
+              JOIN memories mb ON mb.id = b.memory_id AND mb.scope_id = ?
+             LIMIT ?
+            """,
+            (scope_id, scope_id, limit),
+        ).fetchall()
+        return [(UUID(r[0]), UUID(r[1]), UUID(r[2])) for r in rows]
+
     async def scope_summaries(self) -> list[tuple[str, str, int]]:
         rows = self._conn.execute(
             """

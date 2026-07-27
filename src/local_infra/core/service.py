@@ -95,6 +95,43 @@ class ImproveReport:
 
 
 @dataclass
+class GraphNode:
+    """One memory, positioned by the client. ``current`` drives colour and size."""
+
+    id: str
+    statement: str
+    subject: str
+    predicate: str
+    object: str
+    confidence: float
+    seen_count: int
+    valid_from: str
+    valid_until: str | None
+    current: bool
+
+
+@dataclass
+class GraphEdge:
+    """``kind`` is one of: supersedes | provenance | related."""
+
+    source: str
+    target: str
+    kind: str
+    weight: float = 1.0
+    #: Only set for provenance edges — the episode both facts came from.
+    episode_id: str | None = None
+
+
+@dataclass
+class MemoryGraph:
+    scope: str
+    nodes: list[GraphNode] = field(default_factory=list)
+    edges: list[GraphEdge] = field(default_factory=list)
+    #: Channels that could not be computed on this backend, e.g. ["related"].
+    unavailable: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ScopeSummary:
     """One scope and how many facts are currently true in it."""
 
@@ -197,6 +234,12 @@ class MemoryService(ABC):
         """Every scope with its live fact count. Backends that own a Repository get
         this for free; the default is empty so a fake service need not implement it."""
         return []
+
+    async def graph(
+        self, scope: str = GLOBAL, *, as_of: datetime | None = None, limit: int = 200
+    ) -> MemoryGraph:
+        """The memory graph for a scope. Default is empty so fakes need not implement it."""
+        return MemoryGraph(scope=scope)
 
     async def start(self) -> None:
         """Start background work (e.g. the async extraction worker). No-op by default;

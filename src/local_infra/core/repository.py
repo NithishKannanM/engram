@@ -155,6 +155,16 @@ class Repository(Protocol):
         """Every scope id — so ``improve(scope=None)`` can sweep the whole ledger."""
         ...
 
+    async def coextracted_pairs(
+        self, scope_id: int, *, limit: int = 500
+    ) -> list[tuple[UUID, UUID, UUID]]:
+        """``(memory_a, memory_b, shared_episode)`` for facts pulled from the SAME
+        episode — the provenance edges of the memory graph.
+
+        Ordered pairs with ``a < b`` so an edge appears once, not twice.
+        """
+        ...
+
     async def scope_summaries(self) -> list[tuple[str, str, int]]:
         """``(name, kind, currently-valid memory count)`` per scope, name-ordered.
 

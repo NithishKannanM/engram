@@ -391,6 +391,55 @@ class PgRepository:
         rows = await self.conn.fetch("SELECT id FROM scopes ORDER BY id")
         return [int(r["id"]) for r in rows]
 
+    async def coextracted_pairs(
+        self, scope_id: int, *, limit: int = 500
+    ) -> list[tuple[UUID, UUID, UUID]]:
+        rows = await self.conn.fetch(
+            """
+            SELECT a.memory_id AS a, b.memory_id AS b, a.episode_id AS ep
+              FROM memory_episodes a
+              JOIN memory_episodes b
+                ON a.episode_id = b.episode_id AND a.memory_id < b.memory_id
+              JOIN memories ma ON ma.id = a.memory_id AND ma.scope_id = $1
+              JOIN memories mb ON mb.id = b.memory_id AND mb.scope_id = $1
+             LIMIT $2
+            """,
+            scope_id,
+            limit,
+        )
+        return [(r["a"], r["b"], r["ep"]) for r in rows]
+
+    async def similar_pairs(
+        self, scope_id: int, *, threshold: float = 0.82, limit: int = 300
+    ) -> list[tuple[UUID, UUID, float]]:
+        """Currently-valid rows whose statements are semantically close.
+
+        pgvector only — deliberately NOT on the ``Repository`` protocol, because the
+        SQLite ledger has no vector column and a stub there would be a lie. Callers
+        feature-detect it and simply omit "related" edges on the exmem backend.
+
+        The self-join is O(n²) over a scope, so ``limit`` is a hard stop: this powers
+        a visualisation, not a retrieval path.
+        """
+        rows = await self.conn.fetch(
+            """
+            SELECT a.id AS a, b.id AS b, 1 - (a.embedding <=> b.embedding) AS sim
+              FROM memories a
+              JOIN memories b
+                ON a.scope_id = b.scope_id AND a.id < b.id
+             WHERE a.scope_id = $1
+               AND a.valid_until IS NULL AND b.valid_until IS NULL
+               AND a.embedding IS NOT NULL AND b.embedding IS NOT NULL
+               AND 1 - (a.embedding <=> b.embedding) >= $2
+             ORDER BY sim DESC
+             LIMIT $3
+            """,
+            scope_id,
+            threshold,
+            limit,
+        )
+        return [(r["a"], r["b"], float(r["sim"])) for r in rows]
+
     async def scope_summaries(self) -> list[tuple[str, str, int]]:
         rows = await self.conn.fetch(
             """

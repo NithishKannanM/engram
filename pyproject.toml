@@ -16,6 +16,13 @@ dependencies = [
     "rapidfuzz>=3.0",
     "fastapi>=0.115",
     "uvicorn>=0.30",
+    # Explicit, not transitive. These all arrive via cognee today, which means a
+    # cognee bump could silently remove a dependency this service builds on.
+    "litellm>=1.83.7",
+    "pypdf>=6.0",
+    "python-docx>=1.1",
+    "filetype>=1.2",
+    "python-multipart>=0.0.20",
 ]
 
 [dependency-groups]

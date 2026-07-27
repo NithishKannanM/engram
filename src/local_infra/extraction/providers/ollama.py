@@ -12,7 +12,6 @@ All local inference is serialized behind one process-wide semaphore: this box ha
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections.abc import Sequence
 
@@ -21,9 +20,11 @@ import httpx
 from local_infra.config import get_settings
 from local_infra.extraction.providers.base import ProviderResult, Stage
 from local_infra.extraction.schemas import ExtractionResult, flatten_schema
+from local_infra.llm.gpu import OLLAMA_LOCK as _OLLAMA_LOCK
 
-# One lock for ALL Ollama providers (small, repair, large share the GPU).
-_OLLAMA_LOCK = asyncio.Semaphore(1)
+# _OLLAMA_LOCK is imported, not defined here, so the chat router shares the SAME
+# semaphore: small/repair/large AND chat all contend for one 6GB GPU. Defining a
+# second one anywhere would give both subsystems a lock that guards nothing.
 
 _SYSTEM = (
     "You are a precise knowledge-extraction engine. Extract durable facts about the "

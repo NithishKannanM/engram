@@ -33,6 +33,9 @@ from local_infra.core.service import (
     GLOBAL,
     ExtractMode,
     ForgetResult,
+    GraphEdge,
+    GraphNode,
+    MemoryGraph,
     MemoryService,
     RememberResult,
     ScopeSummary,
@@ -73,6 +76,82 @@ class LedgerBackend(MemoryService):
             ScopeSummary(name=name, kind=kind, memories=n)
             for name, kind, n in await self._repo.scope_summaries()
         ]
+
+    async def graph(
+        self, scope: str = GLOBAL, *, as_of: datetime | None = None, limit: int = 200
+    ) -> MemoryGraph:
+        """Build the memory graph from the ledger.
+
+        ``include_invalidated=True`` is what makes the time slider meaningful: the
+        superseded rows ARE the history, so they must be in the node set even though
+        recall would drop them. ``current`` is computed against ``as_of`` rather than
+        read off ``valid_until``, so sliding back in time turns an old fact green
+        again instead of leaving it permanently greyed out.
+        """
+        name, kind, key = parse_scope(scope)
+        scope_id = await self._repo.ensure_scope(
+            name, kind=kind, key=key, offline_only=self._offline
+        )
+
+        # NOTE: as_of is deliberately NOT passed to facts(). The repository's as_of
+        # applies a *visibility* filter — it returns only rows valid at that instant,
+        # which drops every superseded row and therefore every supersede edge. That
+        # would make the time slider erase the exact chain it exists to animate.
+        #
+        # Instead: fetch the whole history, keep everything already KNOWN at `at`
+        # (valid_from <= at), and let `current` say which of those were true then.
+        # The node set stays stable as the slider moves, so the force layout settles
+        # once and the highlight travels through it.
+        rows = await self._repo.facts(scope_id, include_invalidated=True, limit=limit)
+        at = as_of or datetime.now(timezone.utc)
+        rows = [m for m in rows if m.valid_from <= at]
+
+        nodes: list[GraphNode] = []
+        present: set[UUID] = set()
+        for m in rows:
+            present.add(m.id)
+            valid_now = m.valid_from <= at and (m.valid_until is None or m.valid_until > at)
+            nodes.append(
+                GraphNode(
+                    id=str(m.id),
+                    statement=m.statement,
+                    subject=m.subject,
+                    predicate=m.predicate,
+                    object=m.object,
+                    confidence=m.confidence,
+                    seen_count=m.seen_count,
+                    valid_from=m.valid_from.isoformat(),
+                    valid_until=m.valid_until.isoformat() if m.valid_until else None,
+                    current=valid_now,
+                )
+            )
+
+        edges: list[GraphEdge] = []
+        # Supersede edges come free off the rows themselves — no extra query, and
+        # both backends carry the columns.
+        for m in rows:
+            if m.invalidated_by_id and m.invalidated_by_id in present:
+                edges.append(
+                    GraphEdge(str(m.id), str(m.invalidated_by_id), "supersedes")
+                )
+
+        for a, b, episode in await self._repo.coextracted_pairs(scope_id):
+            if a in present and b in present:
+                edges.append(GraphEdge(str(a), str(b), "provenance", episode_id=str(episode)))
+
+        unavailable: list[str] = []
+        # Semantic similarity needs pgvector. Feature-detect rather than declare it on
+        # the Repository protocol — the SQLite ledger has no vector column, and a stub
+        # there would silently return "no related facts" instead of "cannot compute".
+        similar = getattr(self._repo, "similar_pairs", None)
+        if similar is None:
+            unavailable.append("related")
+        else:
+            for a, b, sim in await similar(scope_id):
+                if a in present and b in present:
+                    edges.append(GraphEdge(str(a), str(b), "related", weight=sim))
+
+        return MemoryGraph(scope=scope, nodes=nodes, edges=edges, unavailable=unavailable)
 
     # ---- remember --------------------------------------------------------- #
     async def remember(

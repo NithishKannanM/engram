@@ -12,10 +12,20 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import pytest
+
 from local_infra.bench.generator import Fact, generate_conversation
 from local_infra.bench.judge import CachingJudge, LocalJudge
 from local_infra.bench.metrics import answer_present, percentile
-from local_infra.bench.pricing import CLOUD_PRICING, Usage, cost_usd, is_local, total_cost_usd
+from local_infra.bench.pricing import (
+    CLOUD_PRICING,
+    UnknownModelPricing,
+    Usage,
+    cost_usd,
+    cost_usd_or_none,
+    is_local,
+    total_cost_usd,
+)
 from local_infra.bench.runner import BenchmarkRunner
 from local_infra.core.models import Episode
 from local_infra.core.service import (
@@ -212,3 +222,37 @@ async def test_runner_drives_service_and_computes_metrics():
     assert result.p95_ingest_ms >= result.p50_ingest_ms >= 0.0
     assert result.total_extracted > 0
     assert result.cost_usd == 0.0
+
+
+# --------------------------------------------------------------------------- #
+# Provider-qualified pricing.
+#
+# The old rule ("anything not in CLOUD_PRICING is local and free") priced
+# `anthropic/claude-sonnet-5` at $0.00, which silently falsified the "an
+# all-local run is $0.00" claim the moment a router used qualified ids.
+# --------------------------------------------------------------------------- #
+def test_provider_qualified_cloud_ids_are_not_local():
+    assert not is_local("anthropic/claude-sonnet-5")
+    assert not is_local("openrouter/anthropic/claude-sonnet-5")
+    assert not is_local("vertex_ai/claude-haiku-4-5")
+
+
+def test_provider_qualified_cloud_ids_price_correctly():
+    # Same price as the bare id: the namespace is peeled before lookup.
+    assert cost_usd("anthropic/claude-sonnet-5", 1_000_000, 1_000_000) == 18.0
+    assert cost_usd("openrouter/anthropic/claude-opus-4-8", 1_000_000, 0) == 5.0
+
+
+def test_local_namespaces_stay_free():
+    assert is_local("ollama/llama3.2:latest")
+    assert is_local("ollama_chat/llama3.1:8b")
+    assert cost_usd("ollama_chat/llama3.1:8b", 10_000_000, 10_000_000) == 0.0
+
+
+def test_unknown_model_raises_instead_of_billing_zero():
+    with pytest.raises(UnknownModelPricing):
+        cost_usd("someprovider/mystery-model", 1_000, 1_000)
+    # A typo'd cloud id must not quietly report $0.00 either.
+    with pytest.raises(UnknownModelPricing):
+        cost_usd("claude-sonet-5", 1_000, 1_000)
+    assert cost_usd_or_none("someprovider/mystery-model", 1_000, 1_000) is None
