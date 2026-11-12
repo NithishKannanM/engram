@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Engram — a local-first hybrid graph+vector memory service (Phase 1)"
 readme = "README.md"
 authors = [
-    { name = "NithishKannanM", email = "kannanreddy116@gmail.com" }
+    { name = "NithishKannanM", email = "nithishkannanm1@gmail.com" }
 ]
 requires-python = ">=3.14"
 dependencies = [
