@@ -53,6 +53,8 @@ uv run uvicorn local_infra.api.app:app    # serve the REST API on :8077
 Choose the backend with `MEMORY_BACKEND=exmem` (default, zero-infra) or `MEMORY_BACKEND=cognee`.
 All settings are `MEMORY_*` env vars (or a `.env`); see `src/local_infra/config.py`.
 
+> **Note:** the Postgres password in `compose.yaml` (`local_infra`) is a dev-only value for local use; the container binds to `127.0.0.1` only.
+
 ### Acceptance path
 
 ```
